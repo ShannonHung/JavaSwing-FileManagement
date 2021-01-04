@@ -1,8 +1,6 @@
 package com.filemanage;
 
 import javax.swing.*;
-import javax.swing.event.InternalFrameAdapter;
-import javax.swing.event.InternalFrameEvent;
 import javax.swing.event.TreeSelectionEvent;
 import javax.swing.event.TreeSelectionListener;
 import javax.swing.plaf.basic.BasicInternalFrameUI;
@@ -17,9 +15,8 @@ import java.beans.PropertyChangeEvent;
 import java.beans.PropertyVetoException;
 import java.beans.VetoableChangeListener;
 import java.io.*;
-import java.net.MalformedURLException;
-import java.net.URL;
 import java.nio.file.*;
+import java.nio.file.attribute.BasicFileAttributes;
 
 public class FileFrame extends JFrame implements TreeSelectionListener{
     //右邊準備顯示metadata的畫面
@@ -36,10 +33,9 @@ public class FileFrame extends JFrame implements TreeSelectionListener{
     JMenuItem uploadItem;
     JMenuItem downloadItem;
     JMenuItem exitItem;
-    JMenuItem newItem;
-    JMenuItem saveItem;
+    JMenuItem deleteItem;
 
-    String filePath="./";
+    String filePath="C:\\Users\\micky\\OneDrive\\桌面";
 
 
     //目前使用者開了幾個新檔案
@@ -50,6 +46,12 @@ public class FileFrame extends JFrame implements TreeSelectionListener{
     private JTree tree;
     private JScrollPane treePane;
     private JSplitPane splitPane;
+
+    //外觀
+    public static int LOOK_AND_FEEL_METAL = 0;
+    public static int LOOK_AND_FEEL_MOTIF = 1;
+    public static int LOOK_AND_FEEL_WINDOWS = 2;
+    public static int LOOK_AND_FEEL_WINDOWS_CLASSIC = 3;
 
 
     public static void main(String[] args) {
@@ -62,6 +64,7 @@ public class FileFrame extends JFrame implements TreeSelectionListener{
 
         setLocation(100, 100);
         setSize(800, 400);
+        changeLookAndFeel(LOOK_AND_FEEL_WINDOWS_CLASSIC);
         setVisible(true);
         setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
     }
@@ -76,15 +79,12 @@ public class FileFrame extends JFrame implements TreeSelectionListener{
 
         this.renderTree();
 
-
-
         getContentPane().setLayout(new BorderLayout(5, 5));
         splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
-        splitPane.setRightComponent(mdiPane);
+        splitPane.setRightComponent(mdiPane); //右邊顯示資料視窗 會擴展到最大
         splitPane.setOneTouchExpandable(true);
         getContentPane().add(splitPane, BorderLayout.CENTER);
         getContentPane().add(this.statusLabel, BorderLayout.SOUTH);
-
         getContentPane().add(this.mdiPane, BorderLayout.CENTER);
         getContentPane().add(this.treePane, BorderLayout.WEST);
     }
@@ -125,20 +125,17 @@ public class FileFrame extends JFrame implements TreeSelectionListener{
         uploadItem = new JMenuItem("上傳檔案");
         downloadItem = new JMenuItem("下載檔案");
         exitItem = new JMenuItem("離開系統...");
-        newItem = new JMenuItem("建立新檔...");
-        saveItem = new JMenuItem("儲存新檔...");
+        deleteItem = new JMenuItem("刪除檔案");
 
         uploadItem.setMnemonic('U');
         downloadItem.setMnemonic('D');
         exitItem.setMnemonic('E');
-        newItem.setMnemonic('N');
-        saveItem.setMnemonic('S');
+        deleteItem.setMnemonic('D');
 
         //function implementation
         uploadItem.addActionListener(new uploadAction());
         downloadItem.addActionListener(new downloadAction());
-        newItem.addActionListener(new newItemAction());
-        saveItem.addActionListener(new newItemAction());
+        deleteItem.addActionListener(new deleteItemAction());
         exitItem.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent e) {
                 System.exit(0);
@@ -147,69 +144,108 @@ public class FileFrame extends JFrame implements TreeSelectionListener{
 
         fileMenu.add(uploadItem);
         fileMenu.add(downloadItem);
-        fileMenu.add(newItem);
-        fileMenu.add(saveItem);
+        fileMenu.add(deleteItem);
         fileMenu.add(exitItem);
-
-
     }
 
-
+    //TODO 上傳檔案:
     class uploadAction implements ActionListener {
         public void actionPerformed(ActionEvent e) {
             JFileChooser fileChooser = new JFileChooser(filePath);
             fileChooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
             if(fileChooser.showSaveDialog(FileFrame.this) == JFileChooser.CANCEL_OPTION) return;
             File selectedFile = fileChooser.getSelectedFile();
+
+            //目前選取準備上傳的檔案
             filePath = selectedFile.getPath();
-            System.out.println("test=>"+filePath);
+            System.out.println("File which is going to upload =>"+filePath);
             Path source = Paths.get(filePath);
 
-            FileNode targetFile = (FileNode)currentNode.getUserObject();
+            //將選取的檔案上傳的位置
+            FileNode targetFile = (FileNode)checkDocOrFile(currentNode).getUserObject();
+
+            //存放目標的位置: folder location\filename.png
             Path target = Paths.get(targetFile.getFile().getAbsolutePath()+"\\"+source.getFileName());
             System.out.println("this is source =>" + source.toString() + "\n This is target =>" + target.toString());
+
             try {
                 Files.copy( source, target,StandardCopyOption.REPLACE_EXISTING);
-                SwingUtilities.invokeLater(new RenderTree());
+                addNode(checkDocOrFile(currentNode), selectedFile);
+//                addObject(checkDocOrFile(currentNode), source.getFileName(), true);
+                statusLabel.setText("成功上傳" + source.getFileName() +"至" +target.toString());
+
             } catch (IOException exception) {
+                statusLabel.setText("上傳" + source.getFileName() + "失敗");
                 exception.printStackTrace();
             }
         }
     }
-    class RenderTree implements Runnable{
-        @Override
-        public void run() {
-            renderTree();
-        }
-    }
 
+    //TODO 下載檔案: 知道使用者要儲存的路徑 > 抓取目前點選的檔案 > 複製到路徑中
     class downloadAction implements ActionListener {
         public void actionPerformed(ActionEvent e) {
-            renderTree();
+            JFileChooser fileChooser = new JFileChooser(filePath);
+            fileChooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY); // FILES_ONLY, DIRECTORIES_ONLY, FILES_AND_DIRECTORIES
+            //若選擇取消要跳出提醒視窗
+            if(fileChooser.showSaveDialog(FileFrame.this) == JFileChooser.CANCEL_OPTION) return;
+
+            //取得使用者選取的路徑
+            File selectedFile = fileChooser.getSelectedFile();
+            String destination = selectedFile.getPath();
+
+            FileNode fileNode = (FileNode) currentNode.getUserObject();
+            //存放目標的位置: folder location\filename.png
+            Path target = Paths.get(destination+"\\"+fileNode.toString());
+
+
+            //取得使用者欲下載的檔案
+            File sourcefile = fileNode.getFile();
+            Path source = Paths.get(sourcefile.getAbsolutePath());
+
+            try {
+                Files.copy( source, target,StandardCopyOption.REPLACE_EXISTING);
+                addObject(checkDocOrFile(currentNode), source.getFileName(), true);
+                statusLabel.setText("成功下載" + source.getFileName() +"至" +target.toString());
+            } catch (IOException exception) {
+                statusLabel.setText("下載" + source.getFileName() + "失敗");
+                exception.printStackTrace();
+            }
         }
     }
 
-    //建立新檔案所需要執行的動作:
-    class newItemAction implements  ActionListener{
+    //TODO 改變視窗畫面
+    public void changeLookAndFeel(int myLookAndFeel){
+        //裡面是所有的style
+        UIManager.LookAndFeelInfo looks[] = UIManager.getInstalledLookAndFeels();
+        try {
+            //選取第三個style
+            UIManager.setLookAndFeel(looks[myLookAndFeel].getClassName());
+        }
+        catch(Exception x) {}
+        //要加上否則不會套用
+        SwingUtilities.updateComponentTreeUI(this);
+    }
+
+    //TODO 刪除檔案: 取得目前node > 得知該檔案的路徑 > 刪除該檔案
+    class deleteItemAction implements ActionListener{
+        @Override
         public void actionPerformed(ActionEvent e) {
-            String fileName = "開新檔案-" + (++newFileIndex);
-            //(1)產生編輯內容視窗
-            createDocFrame(fileName, null);
-            //(2)改變底下狀態欄位
-            statusLabel.setText("建立新檔案");
-            //(3)在tree新增節點,需要parent node, filename for new node, visible or not
-            addObject(checkDocOrFile(currentNode), fileName, true);
-//            splitPane.setLeftComponent(treePane);
-//            splitPane.setOneTouchExpandable(true);
+            FileNode deleteNode = (FileNode) currentNode.getUserObject();
+            Path deletePath = Paths.get(deleteNode.getFile().getAbsolutePath());
+            try {
+                System.out.println("[Delete Path]" + deletePath);
+                treeModel.removeNodeFromParent(currentNode);
+                Files.delete(deletePath);
+                statusLabel.setText("已成功刪除"+deleteNode.toString());
+            } catch (IOException exception) {
+                statusLabel.setText("刪除"+deleteNode.toString()+"失敗");
+                System.out.println("[Delete File Error]");
+                exception.printStackTrace();
+            }
         }
     }
 
-    class saveItemAction implements ActionListener{
-        public void actionPerformed(ActionEvent e) {
-
-        }
-    }
-
+    //TODO 檢查該node為file or directory, 會根據file or directory取得其parent資料夾 用於儲存檔案位置使用
     public DefaultMutableTreeNode checkDocOrFile(DefaultMutableTreeNode node){
         if(node.getChildCount()>0){
             System.out.println("This is Directory!!" + node.toString());
@@ -218,28 +254,32 @@ public class FileFrame extends JFrame implements TreeSelectionListener{
             System.out.println("This is File, and the parent of file is =>"+node.getParent().toString());
             return (DefaultMutableTreeNode) node.getParent();
         }
-
     }
 
-    //TODO 在原本的Tree在建立新節點
+    //TODO 負責新增節點
+    public DefaultMutableTreeNode addNode(DefaultMutableTreeNode parent, File file){
+        FileNode fileNode = new FileNode(file);
+        DefaultMutableTreeNode childeNode = new DefaultMutableTreeNode(fileNode);
+        treeModel.insertNodeInto(childeNode, parent, parent.getChildCount());
+        return childeNode;
+    }
+
+    //TODO 建立Tree
     public DefaultMutableTreeNode addObject(DefaultMutableTreeNode parent, Object child, boolean visible){
         //先將檔案寫入系統中
         File newfile = new File(child.toString());
-
+        FileNode fileNode = new FileNode(child.toString(), newfile);
 
         //(1) 先建立出一個new file node
-        DefaultMutableTreeNode childeNode = new DefaultMutableTreeNode(child);
+        DefaultMutableTreeNode childeNode = new DefaultMutableTreeNode(fileNode);
         if(parent == null) parent = rootNode;
         treeModel.insertNodeInto(childeNode, parent, parent.getChildCount());
-
 
         //make sure user can see the node we created
         if(visible){
             TreePath path = new TreePath(childeNode.getPath());
             //將tree展開到新建立的點
             tree.scrollPathToVisible(path);
-            //將游標跳到最新的點
-            tree.setSelectionPath(path);
         }
         return childeNode;
     }
@@ -257,9 +297,8 @@ public class FileFrame extends JFrame implements TreeSelectionListener{
         catch(IOException e) {}
     }
 
-
     //TODO　建立右邊可以編輯內容的視窗
-    public JInternalFrame createDocFrame(String title, File docFile){
+    public JInternalFrame createDocFrame(String title){
         JTextArea textArea = new JTextArea(10, 30);
         textArea.setFont(new Font("Monospace", Font.PLAIN, 12));
         textArea.setMargin(new Insets(5, 5, 5, 5));
@@ -275,71 +314,57 @@ public class FileFrame extends JFrame implements TreeSelectionListener{
         //在視窗塞可以編輯內容的視窗
         frame.getContentPane().add(new JScrollPane(textArea), BorderLayout.CENTER);
         return null;
-
-
     }
 
     //TODO 當Tree目前被觸發在哪裡
     public void valueChanged(TreeSelectionEvent e) {
-        DefaultMutableTreeNode node = (DefaultMutableTreeNode) tree.getLastSelectedPathComponent();
-        showStatusLabel(node);
-        showDocFrame(node.toString(),(FileNode) node.getUserObject());
-        currentNode = node;
-        System.out.println(checkDocOrFile(currentNode));
+
+        try {
+            DefaultMutableTreeNode node = (DefaultMutableTreeNode) tree.getLastSelectedPathComponent();
+            if(node!=null){
+                showStatusLabel(node);
+                showDocFrame(node.toString(),(FileNode) node.getUserObject());
+                currentNode = node;
+                System.out.println(checkDocOrFile(currentNode));
+            }
+        } catch (IOException exception) {
+            exception.printStackTrace();
+        }
     }
 
     //TODO 在右邊視窗展示檔案內容
-    public JInternalFrame showDocFrame(String title,
-                                       FileNode docFile)
-    {
-        //為了不要讓Frame多個塞在mdiPane裡面
-        JInternalFrame[] selectedFrame = mdiPane.getAllFrames();
-        if(selectedFrame.length > 0){
-            for(JInternalFrame frame : selectedFrame){
-                frame.dispose();
+    public void showDocFrame(String title, FileNode docFile) throws IOException{
+            System.out.println("[showDoc Called] => " + docFile.toString());
+
+            //為了不要讓Frame多個塞在mdiPane裡面
+            JInternalFrame[] selectedFrame = mdiPane.getAllFrames();
+            if(selectedFrame.length > 0){
+                for(JInternalFrame frame : selectedFrame){
+                    frame.dispose();
+                }
             }
-        }
 
-        JTextArea txtArea =  new JTextArea(10, 30);
-        txtArea.setFont(new Font("Monospace", Font.PLAIN, 12));
-        txtArea.setMargin(new Insets(5, 5, 5, 5));
-        txtArea.setTabSize(3);
-        txtArea.setCaretPosition(txtArea.getDocument().getLength());
-
-        JInternalFrame frame = new JInternalFrame(title, true, true, true, false);
-        BasicInternalFrameUI ui = (BasicInternalFrameUI) frame.getUI();
-        System.out.println("east " + ui.getEastPane() + " north " + ui.getNorthPane());
-        System.out.println("west " + ui.getWestPane() + " south " + ui.getSouthPane());
-        //MetalInternalFrameUI ui = new MetalInternalFrameUI(frame);
-        //frame.setUI(ui);
-        frame.getContentPane().add(new JScrollPane(txtArea), BorderLayout.NORTH);
-
-        if(docFile != null) {
-            txtArea.setText(loadTextFromFile(docFile.getFile()));
-        }
-        frame.pack();
-        this.mdiPane.add(frame);
-        try { frame.setMaximum(true); }
-        catch(java.beans.PropertyVetoException e){}
-        frame.setVisible(true);
-        frame.addInternalFrameListener(new InternalFrameAdapter(){
-            public void internalFrameClosed(InternalFrameEvent e) {
-                String key = e.getInternalFrame().getTitle();
-                statusLabel.setText(key + "已關閉");
+            //可以關閉的框框
+            JInternalFrame frame = new JInternalFrame(title, true, true, true, false);
+            //框框裡面要塞txtArea
+            JTextArea txtArea =  new JTextArea(10, 30);
+            if(docFile != null) {
+                System.out.println("[showDoc Called] metadata is  => "+ getMetadataByURL(docFile.getFile()));
+                txtArea.setText(getMetadataByURL(docFile.getFile()));
             }
-            public void internalFrameActivated(InternalFrameEvent e) {
-                String key = e.getInternalFrame().getTitle();
-                statusLabel.setText("編輯" + key);
-            }
-        });
 
-        //如果要關閉frame
-        frame.addVetoableChangeListener(new VetoableChangeListener(){
+            frame.getContentPane().add(new JScrollPane(txtArea), BorderLayout.CENTER);
+
+            frame.pack();
+            frame.setSize(500,350);
+            this.mdiPane.add(frame);
+            frame.setVisible(true);
+            //如果要關閉frame
+            frame.addVetoableChangeListener(new VetoableChangeListener(){
             public void vetoableChange(PropertyChangeEvent e) throws PropertyVetoException
             {
                 if(e.getPropertyName().equals(JInternalFrame.IS_CLOSED_PROPERTY)) {
                     boolean changed = ((Boolean)e.getNewValue()).booleanValue();
-                    System.out.println("changed=" + changed);
                     if(!changed) return;
                     JInternalFrame frame = (JInternalFrame)e.getSource();
                     int confirm = JOptionPane.showOptionDialog(frame,
@@ -349,17 +374,19 @@ public class FileFrame extends JFrame implements TreeSelectionListener{
                             JOptionPane.QUESTION_MESSAGE,
                             null, null, null);
                     if(confirm != 0) {
-                        statusLabel.setText("取消關閉");
+                        statusLabel.setText("取消關閉" + frame.getTitle());
                         throw new java.beans.PropertyVetoException("Cancelled", null);
+                    }else{
+                        statusLabel.setText("已關閉"+ frame.getTitle());
                     }
                 }
             }
         });
-
-        return frame;
     }
-    public String loadTextFromFile(File docFile)
-    {
+
+    //TODO 將file的檔案的詳細資訊載入
+    public String loadTextFromFile(File docFile) throws IOException {
+        getMetadataByURL(docFile);
         String str;
         StringBuffer buffer = new StringBuffer();
         BufferedReader input;
@@ -374,6 +401,31 @@ public class FileFrame extends JFrame implements TreeSelectionListener{
         return buffer.toString();
     }
 
+    //TODO the method to get metadata
+    private String getMetadataByURL(File file) throws IOException {
+        Path path = Paths.get(file.getAbsolutePath());
+        BasicFileAttributes attr = Files.readAttributes(path, BasicFileAttributes.class);
+        String metadata ="";
+        if(attr.isDirectory()){
+            metadata = file.getName() + "為資料夾" +"\n" +
+                    "裡面包含" + file.list().length + "個檔案" +"\n" +
+                    "檔案建立日期: " + attr.creationTime() +"\n" +
+                    "上次存取日期: " + attr.lastAccessTime() +"\n" +
+                    "上次修改日期: " + attr.lastModifiedTime()+"\n" +
+                    "檔案大小: " + attr.size() +"位元組\n";
+        }else{
+            metadata = file.getName() + "為檔案" +"\n" +
+                    "檔案路徑: " + filePath +"\n" +
+                    "檔案建立日期: " + attr.creationTime() +"\n" +
+                    "上次存取日期: " + attr.lastAccessTime() +"\n" +
+                    "上次修改日期: " + attr.lastModifiedTime()+"\n" +
+                    "檔案大小: " + attr.size() +"位元組";
+        }
+
+
+        return metadata;
+    }
+
     private void showStatusLabel(DefaultMutableTreeNode node){
         if(node==null) return;
         Object nodeInfo = node.getUserObject();
@@ -386,7 +438,6 @@ public class FileFrame extends JFrame implements TreeSelectionListener{
             displayURL("Folder: "+node.toString());
         }
     }
-
 
     private void displayURL(String url) {
         if (url != null) {
