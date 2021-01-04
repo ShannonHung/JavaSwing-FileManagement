@@ -77,20 +77,6 @@ public class FileFrame extends JFrame implements TreeSelectionListener{
         //Frame底下要顯示的文字:
         this.statusLabel = new JLabel();
 
-        this.renderTree();
-
-        getContentPane().setLayout(new BorderLayout(5, 5));
-        splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
-        splitPane.setRightComponent(mdiPane); //右邊顯示資料視窗 會擴展到最大
-        splitPane.setOneTouchExpandable(true);
-        getContentPane().add(splitPane, BorderLayout.CENTER);
-        getContentPane().add(this.statusLabel, BorderLayout.SOUTH);
-        getContentPane().add(this.mdiPane, BorderLayout.CENTER);
-        getContentPane().add(this.treePane, BorderLayout.WEST);
-    }
-
-    private void renderTree(){
-        //
         fileRoot= new File(filePath);
         this.rootNode = new DefaultMutableTreeNode(new FileNode("專題檔案", fileRoot));
         currentNode = rootNode; //先把目前指標指向root 如果要新增檔案就在root新增 因為user還沒有點任何檔案
@@ -111,8 +97,21 @@ public class FileFrame extends JFrame implements TreeSelectionListener{
 
         //左邊: 樹狀圖式
         this.treePane = new JScrollPane(this.tree);
+
         getContentPane().add(this.treePane, BorderLayout.WEST);
+
+        getContentPane().setLayout(new BorderLayout(5, 5));
+        splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
+        splitPane.setRightComponent(mdiPane); //右邊顯示資料視窗 會擴展到最大
+        splitPane.setLeftComponent(treePane);
+        splitPane.setOneTouchExpandable(true);
+
+        getContentPane().add(splitPane, BorderLayout.CENTER);
+        getContentPane().add(this.statusLabel, BorderLayout.SOUTH);
+//        getContentPane().add(this.mdiPane, BorderLayout.CENTER);
+//        getContentPane().add(this.treePane, BorderLayout.WEST);
     }
+
 
     private void createMenu() {
         //create Menu Bar
