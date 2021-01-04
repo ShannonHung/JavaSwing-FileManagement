@@ -172,7 +172,8 @@ public class FileFrame extends JFrame implements TreeSelectionListener{
                 addNode(checkDocOrFile(currentNode), selectedFile);
 //                addObject(checkDocOrFile(currentNode), source.getFileName(), true);
                 statusLabel.setText("成功上傳" + source.getFileName() +"至" +target.toString());
-
+                currentNode = rootNode; //因為上傳完成後 點選的東西會不見 所以要重新回歸
+                System.out.println("上船完成目前的currentnode是"+currentNode.toString());
             } catch (IOException exception) {
                 statusLabel.setText("上傳" + source.getFileName() + "失敗");
                 exception.printStackTrace();
@@ -203,7 +204,7 @@ public class FileFrame extends JFrame implements TreeSelectionListener{
 
             try {
                 Files.copy( source, target,StandardCopyOption.REPLACE_EXISTING);
-                addObject(checkDocOrFile(currentNode), source.getFileName(), true);
+//                addObject(checkDocOrFile(currentNode), source.getFileName(), true);
                 statusLabel.setText("成功下載" + source.getFileName() +"至" +target.toString());
             } catch (IOException exception) {
                 statusLabel.setText("下載" + source.getFileName() + "失敗");
@@ -236,6 +237,7 @@ public class FileFrame extends JFrame implements TreeSelectionListener{
                 treeModel.removeNodeFromParent(currentNode);
                 Files.delete(deletePath);
                 statusLabel.setText("已成功刪除"+deleteNode.toString());
+                currentNode = rootNode; //因為上傳完成後 點選的東西會不見 所以要重新回歸
             } catch (IOException exception) {
                 statusLabel.setText("刪除"+deleteNode.toString()+"失敗");
                 System.out.println("[Delete File Error]");
@@ -246,10 +248,14 @@ public class FileFrame extends JFrame implements TreeSelectionListener{
 
     //TODO 檢查該node為file or directory, 會根據file or directory取得其parent資料夾 用於儲存檔案位置使用
     public DefaultMutableTreeNode checkDocOrFile(DefaultMutableTreeNode node){
+        System.out.println("[debug]=>"+node);
         if(node.getChildCount()>0){
             System.out.println("This is Directory!!" + node.toString());
             return node;
-        }else{
+        }else if (node == null){
+            return rootNode;
+        }
+        else{
             System.out.println("This is File, and the parent of file is =>"+node.getParent().toString());
             return (DefaultMutableTreeNode) node.getParent();
         }
@@ -281,38 +287,6 @@ public class FileFrame extends JFrame implements TreeSelectionListener{
             tree.scrollPathToVisible(path);
         }
         return childeNode;
-    }
-
-    //TODO 可以將檔案真正儲存至電腦中
-    public void saveDocFile(JInternalFrame fr, File docFile){
-        Component components[] = fr.getContentPane().getComponents();
-        JTextArea txtArea = (JTextArea) ((JScrollPane) components[0]).getViewport().getView();
-        FileWriter output;
-        try {
-            output = new FileWriter(docFile);
-            output.write(txtArea.getText());
-            output.close();
-        }
-        catch(IOException e) {}
-    }
-
-    //TODO　建立右邊可以編輯內容的視窗
-    public JInternalFrame createDocFrame(String title){
-        JTextArea textArea = new JTextArea(10, 30);
-        textArea.setFont(new Font("Monospace", Font.PLAIN, 12));
-        textArea.setMargin(new Insets(5, 5, 5, 5));
-        textArea.setTabSize(3);
-        textArea.setCaretPosition(textArea.getDocument().getLength());
-
-        //裡面可以關閉的視窗
-        JInternalFrame frame = new JInternalFrame(title, true, true, true, false);
-        BasicInternalFrameUI ui = (BasicInternalFrameUI) frame.getUI();
-        System.out.println("east " + ui.getEastPane() + " north " + ui.getNorthPane());
-        System.out.println("west " + ui.getWestPane() + " south " + ui.getSouthPane());
-
-        //在視窗塞可以編輯內容的視窗
-        frame.getContentPane().add(new JScrollPane(textArea), BorderLayout.CENTER);
-        return null;
     }
 
     //TODO 當Tree目前被觸發在哪裡
@@ -381,23 +355,6 @@ public class FileFrame extends JFrame implements TreeSelectionListener{
                 }
             }
         });
-    }
-
-    //TODO 將file的檔案的詳細資訊載入
-    public String loadTextFromFile(File docFile) throws IOException {
-        getMetadataByURL(docFile);
-        String str;
-        StringBuffer buffer = new StringBuffer();
-        BufferedReader input;
-        try {
-            input = new BufferedReader(new FileReader(docFile));
-            while((str = input.readLine()) != null) {
-                buffer.append(str + "\n");
-            }
-            input.close();
-        }
-        catch(IOException e) {}
-        return buffer.toString();
     }
 
     //TODO the method to get metadata
